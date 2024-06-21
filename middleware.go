@@ -42,27 +42,25 @@ type TraefikGeoIP2 struct {
 	next                      http.Handler
 	name                      string
 	preferXForwardedForHeader bool
-	refreshInterval           time.Duration
+	refreshInterval           string
 	dbPath                    string
 }
 
 // New created a new TraefikGeoIP2 plugin.
 func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.Handler, error) {
-	interval, err := time.ParseDuration(cfg.RefreshInterval)
-	// when change the dynamic config need reload geoDB
-	ResetLookup()
-	if err != nil {
-		log.Printf("[geoip2] Config refreshInterval error use default value 1h: refreshInterval=%s, name=%s, err=%v", cfg.RefreshInterval, name, err)
-		interval, err = time.ParseDuration(DefaultRefreshInterval)
+
+	if cfg.RefreshInterval != "0" {
+		// when change the dynamic config need reload geoDB
+		ResetLookup()
+		log.Printf("[geoip2] DB refreshInterval: refreshInterval=%s", cfg.RefreshInterval)
 	}
-	log.Printf("[geoip2] DB refreshInterval: refreshInterval=%s", cfg.RefreshInterval)
 	if _, err := os.Stat(cfg.DBPath); err != nil {
 		log.Printf("[geoip2] DB not found: db=%s, name=%s, err=%v", cfg.DBPath, name, err)
 		return &TraefikGeoIP2{
 			next:                      next,
 			name:                      name,
 			preferXForwardedForHeader: cfg.PreferXForwardedForHeader,
-			refreshInterval:           interval,
+			refreshInterval:           cfg.RefreshInterval,
 			dbPath:                    cfg.DBPath,
 		}, nil
 	}
@@ -90,10 +88,18 @@ func New(_ context.Context, next http.Handler, cfg *Config, name string) (http.H
 		next:                      next,
 		name:                      name,
 		preferXForwardedForHeader: cfg.PreferXForwardedForHeader,
-		refreshInterval:           interval,
+		refreshInterval:           cfg.RefreshInterval,
 		dbPath:                    cfg.DBPath,
 	}
-	go geo.refreshDB()
+	//disable refresh
+	if cfg.RefreshInterval != "0" {
+		go geo.refreshDB()
+	} else {
+		if ticker != nil {
+			//stop old ticker when change config to "0" from other value
+			ticker.Stop()
+		}
+	}
 	return geo, nil
 	//return &TraefikGeoIP2{
 	//	next:                      next,
@@ -107,7 +113,12 @@ func (g *TraefikGeoIP2) refreshDB() {
 		//stop old ticker
 		ticker.Stop()
 	}
-	ticker = time.NewTicker(g.refreshInterval)
+	interval, err := time.ParseDuration(g.refreshInterval)
+	if err != nil {
+		log.Printf("[geoip2] Config refreshInterval error , has been replaced with '1h': refreshInterval=%s, err=%v", g.refreshInterval, err)
+		interval, err = time.ParseDuration("1h")
+	}
+	ticker = time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
