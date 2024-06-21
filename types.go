@@ -13,7 +13,8 @@ const Unknown = "XX"
 // DefaultDBPath default GeoIP2 database path.
 const DefaultDBPath = "GeoLite2-Country.mmdb"
 
-const DefaultRefreshInterval = "1h"
+// DefaultRefreshInterval default is "0" , refresh be disabled
+const DefaultRefreshInterval = "0"
 
 const (
 	// CountryHeader country header name.
